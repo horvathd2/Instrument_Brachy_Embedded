@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "sync.h": "c",
+        "stdlib.h": "c",
+        "clocks.h": "c",
+        "cstdlib": "c"
+    }
+}
