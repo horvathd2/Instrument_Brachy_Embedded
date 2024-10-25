@@ -3,6 +3,7 @@
         "sync.h": "c",
         "stdlib.h": "c",
         "clocks.h": "c",
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "cyw43_arch.h": "c"
     }
 }
