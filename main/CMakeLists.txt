@@ -14,6 +14,7 @@ target_include_directories(main PRIVATE
 
 target_link_libraries(motor_control PRIVATE
         pico_stdlib
+        pico_time
         pico_multicore
         hardware_pio
         hardware_pwm

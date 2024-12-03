@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "pico/stdlib.h"
+#include "pico/time.h"
 #include "hardware/sync.h"
 #include "hardware/pwm.h"
 #include "hardware/timer.h"
@@ -17,12 +18,21 @@ struct PWM{
 struct PID{
     long int current_pos;
     long int pos_error;
+    long int prev_pos_error;
     long int pos_setpoint;
     uint32_t duty_cycle;
     uint32_t critical_delta;
     uint32_t limit;
     uint32_t maxSpeed;
+    uint32_t current_time;
+    uint32_t previous_time;
+    uint32_t delta_time;
+    uint32_t integral;
+    uint32_t derivative;
+    uint32_t PID_SUM;
     uint8_t Kp;
+    uint8_t Kd;
+    uint8_t Ki;
 };
 struct encoder{
     int gear_ratio;
@@ -75,6 +85,15 @@ void init_PID(Motor *motor,const int critical_delta, const int limit){
     motor->pid.maxSpeed = 9804;
     //motor->pid.current_pos = 0;
     motor->pid.limit = (float) limit/360 * motor->encoder.gear_ratio * motor->encoder.ticks_per_rev;
+    motor->pid.previous_time = 0;
+    motor->pid.integral = 0;
+    motor->pid.derivative = 0;
+    motor->pid.prev_pos_error = 0;
+
+    //SET PID CONSTANTS
+    motor->pid.Kp = 0;
+    motor->pid.Kd = 0;
+    motor->pid.Ki = 0;
 }
 
 /**
@@ -132,12 +151,22 @@ inline static void stop(const Motor *motor){
 }
 
 /**
- * @brief update function, needs to be called from main methon for each motor, it requires encoder ticks
+ * @brief update error function, needs to be called from main methon for each motor, it requires encoder ticks
  * @param motor motor in question
- * @param encoder the position of the motor given by encoder ticks
 */
 void update_error(Motor *motor){
+    motor->pid.prev_pos_error = motor->pid.pos_error;
     motor->pid.pos_error = motor->pid.pos_setpoint - motor->pid.current_pos;
+}
+
+/**
+ * @brief update time function, needs to be called from main methon for each motor
+ * @param motor motor in question
+*/
+void update_time(Motor *motor){
+    motor->pid.current_time = to_ms_since_boot(get_absolute_time());
+    motor->pid.delta_time = motor->pid.current_time - motor->pid.previous_time;
+    motor->pid.previous_time = motor->pid.current_time;
 }
 
 /**
@@ -153,11 +182,18 @@ static void set_motor_sp(Motor *motor,const long int SP){
  * @param motor is the motor in question
 */
 inline static void compute_duty(Motor *motor){
-    if(motor->pid.pos_error > motor->pid.critical_delta) 
+    //if(motor->pid.pos_error > motor->pid.critical_delta) 
+    //    motor->pid.duty_cycle = motor->pid.maxSpeed; //max speed in %
+    //else
+    //    motor->pid.duty_cycle = ((abs(motor->pid.pos_error)/motor->pid.critical_delta)*(100));
+    //motor->pid.duty_cycle = motor->pid.duty_cycle/100 * 9804; 
+
+    if(motor->pid.PID_SUM > motor->pid.critical_delta) 
         motor->pid.duty_cycle = motor->pid.maxSpeed; //max speed in %
     else
-        motor->pid.duty_cycle = ((abs(motor->pid.pos_error)/motor->pid.critical_delta)*(100));
-    motor->pid.duty_cycle = motor->pid.duty_cycle/100 * 9804;    
+       motor->pid.duty_cycle = ((abs(motor->pid.PID_SUM )/motor->pid.critical_delta)*(100));
+    motor->pid.duty_cycle = motor->pid.duty_cycle/100 * 9804; 
+      
 }
 
 /**
@@ -223,17 +259,21 @@ void move_motor_abs(Motor *motor,const long int abs_pos, uint8_t enable){
         set_motor_sp(motor,input2ticks(abs_pos,motor));
         //printf("ticks %d \n", input2ticks(abs_pos,motor));
         update_error(motor);
+        update_time(motor);
+
+        motor->pid.integral = motor->pid.integral + motor->pid.pos_error * motor->pid.delta_time;
+        motor->pid.derivative = (motor->pid.pos_error - motor->pid.prev_pos_error)/motor->pid.delta_time;
+        motor->pid.PID_SUM = (motor->pid.pos_error * motor->pid.Kp) + (motor->pid.integral * motor->pid.Ki) + (motor->pid.derivative * motor->pid.Kd);
+
         //printf("err0r %d \n", motor->pid.pos_error);
         compute_duty(motor);
         //printf("duty %d \n", motor->pid.duty_cycle);
-        if(motor->pid.pos_error > MIN_POS_DELTA){
-            backward(motor);
-            //printf("%d ticks, %d err, %d sp\n ", motor->pid.current_pos, motor->pid.pos_error, motor->pid.pos_setpoint);
-        }
+
+        if(motor->pid.pos_error > MIN_POS_DELTA) backward(motor);
         else if (motor->pid.pos_error < -MIN_POS_DELTA) forward(motor);
-        else{ 
-            stop(motor); 
-        }
+        else stop(motor); 
+
+        //printf("%d ticks, %d err, %d sp\n ", motor->pid.current_pos, motor->pid.pos_error, motor->pid.pos_setpoint);
     }
 }
 
