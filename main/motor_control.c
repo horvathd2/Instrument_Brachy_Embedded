@@ -118,7 +118,7 @@ void init_motor_pwm(Motor *motor,const int pin, const int frequency){
 }
 
 /**
- * @brief inline function used by a pinter function, to move the motors, at a set speed taken from the motors struct
+ * @brief inline function used by a pointer function, to move the motors, at a set speed taken from the motors struct
  * @param motor the motor that will move
 */
 inline static void forward(const Motor *motor){
@@ -188,7 +188,7 @@ inline static void compute_duty(Motor *motor){
     //    motor->pid.duty_cycle = ((abs(motor->pid.pos_error)/motor->pid.critical_delta)*(100));
     //motor->pid.duty_cycle = motor->pid.duty_cycle/100 * 9804; 
 
-    if(motor->pid.PID_SUM > motor->pid.critical_delta) 
+    if(abs(motor->pid.PID_SUM) > motor->pid.critical_delta) 
         motor->pid.duty_cycle = motor->pid.maxSpeed; //max speed in %
     else
        motor->pid.duty_cycle = ((abs(motor->pid.PID_SUM )/motor->pid.critical_delta)*(100));
